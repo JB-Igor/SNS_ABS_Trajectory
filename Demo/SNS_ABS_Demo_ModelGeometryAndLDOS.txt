@@ -1,0 +1,355 @@
+//==============================================================================
+// SNS_ABS_Demo_ModelGeometryAndLDOS.txt
+//
+// Purpose:
+//   Self-contained model-geometry demonstration of:
+//     1. synthetic rectangular SNS geometry,
+//     2. central-position ray tracing and trajectory-length distribution,
+//     3. 2D and 3D LDOS(E,B) at the center and near an edge,
+//     4. top and side projections of representative 3D center trajectories,
+//     5. zero-field line DOS across the middle of the geometry,
+//     6. a free-vortex 2D surface-state LDOS(x,y,E) calculation.
+//
+// The calculations retain raw and experimentally broadened outputs. Separate
+// normalized copies are created only for display. Re-running the notebook
+// deletes and rebuilds root:SNS_ABS_Demo_ModelGeometryAndLDOS.
+//==============================================================================
+
+
+//==============================================================================
+// 0. Clean initialization and model settings
+//==============================================================================
+SetDataFolder root:
+
+DoWindow/K SNSDemo_Geometry
+DoWindow/K SNSDemo_RayEnsemble
+DoWindow/K SNSDemo_LengthHistogram
+DoWindow/K SNSDemo_Center2D
+DoWindow/K SNSDemo_Edge2D
+DoWindow/K SNSDemo_Center3D
+DoWindow/K SNSDemo_Edge3D
+DoWindow/K SNSDemo_Center3DTopProjection
+DoWindow/K SNSDemo_Center3DTransverseProjection
+DoWindow/K SNSDemo_Center3DLongitudinalProjection
+DoWindow/K SNSDemo_Line2D
+DoWindow/K SNSDemo_VortexCubeRawE0
+DoWindow/K SNSDemo_VortexCubeConvE0
+
+KillDataFolder/Z root:SNS_ABS_Demo_ModelGeometryAndLDOS
+
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Geometry
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:CenterRayDemo
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Center2D
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Edge2D
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Center3D
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Edge3D
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:Center2D
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:Edge2D
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:Center3D
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:Edge3D
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:Line2D
+NewDataFolder/O root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:VortexCube2D
+
+// Select the config folder distributed with SNS_ABS_Trajectory.
+PathInfo SNSDemoConfigPath
+Execute/Q/Z SelectString(V_flag, "NewPath/Q/O/M=\"Select the SNS_ABS_Trajectory config folder\" SNSDemoConfigPath", "PathInfo SNSDemoConfigPath")
+SNS_LoadSettingsConfig("SNSDemoConfigPath", "SNS_DefaultSettings.tsv")
+
+// The config contains the shared demo parameters and the 0.5 eV 2D Fermi
+// energy. Energies are in eV and fields are in T at this stage.
+SNS_InitDefaultSettings()
+
+Variable/G root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_Bangle_deg = 90
+Variable/G root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_Bangle_rad = root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_Bangle_deg*pi/180
+Variable/G root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerX_nm = 0
+Variable/G root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerY_nm = 0
+Variable/G root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_edgeX_nm = 0
+Variable/G root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_edgeY_nm = 50
+Variable/G root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_height_nm = 15
+Variable/G root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_maxPath_nm = 1000
+Variable/G root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_EF3D_eV = 5
+Variable/G root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_stepFac2D = 0.5
+Variable/G root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_linePoints = 31
+Variable/G root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_normMask_eV = 0.8e-3
+Variable/G root:globalLabelSize = 8
+
+
+//==============================================================================
+// 1. Create the synthetic model geometry
+//==============================================================================
+SetDataFolder root:SNS_ABS_Demo_ModelGeometryAndLDOS:Geometry:
+
+Make/O/D/N=(256,128) w_mask=0
+SetScale/I x -250,250,"nm",w_mask
+SetScale/I y -100,100,"nm",w_mask
+w_mask = abs(x) <= 200 && abs(y) <= 60 ? 1 : 0
+
+// Geometry extractors require both the binary mask and an image-like wave.
+Duplicate/O w_mask model_Z_mbgnd_xy
+
+Make/O/D/N=2 DemoPointX_nm={root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerX_nm,root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_edgeX_nm}
+Make/O/D/N=2 DemoPointY_nm={root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerY_nm,root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_edgeY_nm}
+Make/O/D/N=2 DemoLineX_nm={0,0}
+Make/O/D/N=2 DemoLineY_nm={-50,50}
+SetScale d 0,0,"nm",DemoPointX_nm,DemoPointY_nm,DemoLineX_nm,DemoLineY_nm
+
+Duplicate/O w_mask root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Center2D:w_mask
+Duplicate/O model_Z_mbgnd_xy root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Center2D:model_Z_mbgnd_xy
+Duplicate/O w_mask root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:CenterRayDemo:w_mask
+Duplicate/O model_Z_mbgnd_xy root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:CenterRayDemo:model_Z_mbgnd_xy
+Duplicate/O w_mask root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Edge2D:w_mask
+Duplicate/O model_Z_mbgnd_xy root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Edge2D:model_Z_mbgnd_xy
+Duplicate/O w_mask root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Center3D:w_mask
+Duplicate/O model_Z_mbgnd_xy root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Center3D:model_Z_mbgnd_xy
+Duplicate/O w_mask root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Edge3D:w_mask
+Duplicate/O model_Z_mbgnd_xy root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Edge3D:model_Z_mbgnd_xy
+
+DoWindow/K SNSDemo_Geometry
+SNS_DisplayWithScales(w_mask, cmap="davos", showScales=0)
+DoWindow/C SNSDemo_Geometry
+AppendToGraph/W=SNSDemo_Geometry DemoLineY_nm vs DemoLineX_nm
+AppendToGraph/W=SNSDemo_Geometry DemoPointY_nm vs DemoPointX_nm
+ModifyGraph/W=SNSDemo_Geometry rgb(DemoLineY_nm)=(65535,0,0),lsize(DemoLineY_nm)=2
+ModifyGraph/W=SNSDemo_Geometry mode(DemoPointY_nm)=3,marker(DemoPointY_nm)=19,msize(DemoPointY_nm)=5,rgb(DemoPointY_nm)=(0,0,0)
+ModifyGraph/W=SNSDemo_Geometry width=180,height=100,tick=2,fSize=root:globalLabelSize
+Label/W=SNSDemo_Geometry left "y (\\U)"
+Label/W=SNSDemo_Geometry bottom "x (\\U)"
+
+
+//==============================================================================
+// 2. Central-position ray tracing and trajectory-length histogram
+//==============================================================================
+SetDataFolder root:
+SNS_InitDefaultSettings()
+
+SNS_RayTrace_Hist_LN_Weff("root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:CenterRayDemo", STSx=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerX_nm, STSy=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerY_nm, Bangle_deg=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_Bangle_deg, normalize=1, doDisplay=0, padCityscape=1, showFitInfo=0, binL_nm=20, binW_nm=20, histLMin_nm=0, histLMax_nm=500, histWMin_nm=0, histWMax_nm=500)
+
+SetDataFolder root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:CenterRayDemo:
+DoWindow/K SNSDemo_RayEnsemble
+SNS_DisplayWithScales(model_Z_mbgnd_xy, cmap="grayC", showScales=0)
+DoWindow/C SNSDemo_RayEnsemble
+SNS_PlotAllChannelRays_Faint(Hit1x_List_nm, Hit1y_List_nm, Hit2x_List_nm, Hit2y_List_nm, raySparsity=5, faintColor="gray", colorTransparency=0.35, lineSize=0.5)
+Make/O/D/N=1 DemoCenterX_nm=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerX_nm,DemoCenterY_nm=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerY_nm
+SetScale d 0,0,"nm",DemoCenterX_nm,DemoCenterY_nm
+AppendToGraph/W=SNSDemo_RayEnsemble DemoCenterY_nm vs DemoCenterX_nm
+ModifyGraph/W=SNSDemo_RayEnsemble mode(DemoCenterY_nm)=3,marker(DemoCenterY_nm)=19,msize(DemoCenterY_nm)=5,rgb(DemoCenterY_nm)=(0,0,0)
+SetAxis/W=SNSDemo_RayEnsemble left -100,100
+SetAxis/W=SNSDemo_RayEnsemble bottom -250,250
+ModifyGraph/W=SNSDemo_RayEnsemble width=180,height=100,tick=2,fSize=root:globalLabelSize
+Label/W=SNSDemo_RayEnsemble left "y (\\U)"
+Label/W=SNSDemo_RayEnsemble bottom "x (\\U)"
+
+SetDataFolder root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:CenterRayDemo:RayTraceHist:
+DoWindow/K SNSDemo_LengthHistogram
+Display/K=1 Hist_L_N_plot_nm
+DoWindow/C SNSDemo_LengthHistogram
+ModifyGraph/W=SNSDemo_LengthHistogram mode=6,rgb(Hist_L_N_plot_nm)=(0,45000,0),width=180,height=100,tick=2,fSize=root:globalLabelSize
+ModifyGraph/W=SNSDemo_LengthHistogram mirror=1,standoff=0
+Label/W=SNSDemo_LengthHistogram left "P (%)"
+Label/W=SNSDemo_LengthHistogram bottom "\\f02ℓ\\Bn\\f00\\M (\\U)"
+Legend/K/N=text0
+
+
+//==============================================================================
+// 3. Center position: 2D LDOS(E,B)
+//==============================================================================
+SNS_ExtractModesForFolder("root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Center2D:", STSx=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerX_nm, STSy=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerY_nm, Bangle_deg=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_Bangle_deg, doDisplay=0)
+
+SetDataFolder root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:Center2D:
+SNS_ComputeDOS_FromSettings("root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Center2D:", "LDOS_EB_raw", "E_eV")
+SNS_ApplyDOS_Broadening_TplusMod(LDOS_EB_raw, "LDOS_EB_convolved")
+SNS_NormalizeWaterFall(LDOS_EB_convolved, v_maskrange=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_normMask_eV)
+Duplicate/O LDOS_EB_convolved_n LDOS_EB_display
+SetScale/P x DimOffset(LDOS_EB_display,0)*1e3,DimDelta(LDOS_EB_display,0)*1e3,"meV",LDOS_EB_display
+SetScale/P y DimOffset(LDOS_EB_display,1)*1e3,DimDelta(LDOS_EB_display,1)*1e3,"mT",LDOS_EB_display
+
+DoWindow/K SNSDemo_Center2D
+SNS_DisplayWithScales(LDOS_EB_display, cmap="davos", showScales=2)
+DoWindow/C SNSDemo_Center2D
+ModifyGraph/W=SNSDemo_Center2D width=150,height=150,tick=2,fSize=root:globalLabelSize
+Label/W=SNSDemo_Center2D left "B (\\U)"
+Label/W=SNSDemo_Center2D bottom "E (\\U)"
+TextBox/W=SNSDemo_Center2D/C/N=title/F=0/A=LT/X=2/Y=2 "2D, center"
+
+
+//==============================================================================
+// 4. Near-edge position: 2D LDOS(E,B)
+//==============================================================================
+SNS_ExtractModesForFolder("root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Edge2D:", STSx=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_edgeX_nm, STSy=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_edgeY_nm, Bangle_deg=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_Bangle_deg, doDisplay=0)
+
+SetDataFolder root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:Edge2D:
+SNS_ComputeDOS_FromSettings("root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Edge2D:", "LDOS_EB_raw", "E_eV")
+SNS_ApplyDOS_Broadening_TplusMod(LDOS_EB_raw, "LDOS_EB_convolved")
+SNS_NormalizeWaterFall(LDOS_EB_convolved, v_maskrange=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_normMask_eV)
+Duplicate/O LDOS_EB_convolved_n LDOS_EB_display
+SetScale/P x DimOffset(LDOS_EB_display,0)*1e3,DimDelta(LDOS_EB_display,0)*1e3,"meV",LDOS_EB_display
+SetScale/P y DimOffset(LDOS_EB_display,1)*1e3,DimDelta(LDOS_EB_display,1)*1e3,"mT",LDOS_EB_display
+
+DoWindow/K SNSDemo_Edge2D
+SNS_DisplayWithScales(LDOS_EB_display, cmap="davos", showScales=2)
+DoWindow/C SNSDemo_Edge2D
+ModifyGraph/W=SNSDemo_Edge2D width=150,height=150,tick=2,fSize=root:globalLabelSize
+Label/W=SNSDemo_Edge2D left "B (\\U)"
+Label/W=SNSDemo_Edge2D bottom "E (\\U)"
+TextBox/W=SNSDemo_Edge2D/C/N=title/F=0/A=LT/X=2/Y=2 "2D, near edge"
+
+
+//==============================================================================
+// 5. Center position: 3D LDOS(E,B)
+//==============================================================================
+SNS_InitDefaultSettings(EF_in=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_EF3D_eV)
+SNS_ExtractModes3DForFolder("root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Center3D:", STSx=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerX_nm, STSy=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerY_nm, Bangle_deg=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_Bangle_deg, H_nm=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_height_nm, maxPath_nm=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_maxPath_nm, doDisplay=0)
+
+SetDataFolder root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Center3D:
+DoWindow/K SNSDemo_Center3DTopProjection
+DoWindow/K SNSDemo_Center3DTransverseProjection
+DoWindow/K SNSDemo_Center3DLongitudinalProjection
+DoWindow/K SNS_3DMaskTop_XY
+DoWindow/K SNS_3DMaskSide_YZ
+DoWindow/K SNS_3DMaskSide_XZ
+SNS_Show3DMaskSideViews_WithChannels(w_mask, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerX_nm, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerY_nm, thetaList_rad, phiList_rad, v_Longest, v_Gap0, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_Bangle_deg, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_height_nm, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_maxPath_nm)
+
+SNS_DisplayWithScales(w_mask, cmap="grayC", showScales=0)
+DoWindow/C SNSDemo_Center3DTopProjection
+SNS_PlotChannel3D_Surface(w_mask, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerX_nm, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerY_nm, thetaList_rad, phiList_rad, v_Longest, 0.5, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_height_nm, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_maxPath_nm, "SNSDemo_Center3DTopProjection", "Demo3D_long")
+ModifyGraph/W=SNSDemo_Center3DTopProjection rgb($StringFromList(ItemsInList(TraceNameList("SNSDemo_Center3DTopProjection", ";", 1))-1, TraceNameList("SNSDemo_Center3DTopProjection", ";", 1)))=(65535,0,0)
+SNS_PlotChannel3D_Surface(w_mask, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerX_nm, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerY_nm, thetaList_rad, phiList_rad, v_Gap0, 0.5, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_height_nm, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_maxPath_nm, "SNSDemo_Center3DTopProjection", "Demo3D_wmax")
+ModifyGraph/W=SNSDemo_Center3DTopProjection rgb($StringFromList(ItemsInList(TraceNameList("SNSDemo_Center3DTopProjection", ";", 1))-1, TraceNameList("SNSDemo_Center3DTopProjection", ";", 1)))=(0,0,65535)
+Make/O/D/N=1 DemoCenter3DX_nm=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerX_nm,DemoCenter3DY_nm=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_centerY_nm
+SetScale d 0,0,"nm",DemoCenter3DX_nm,DemoCenter3DY_nm
+AppendToGraph/W=SNSDemo_Center3DTopProjection DemoCenter3DY_nm vs DemoCenter3DX_nm
+ModifyGraph/W=SNSDemo_Center3DTopProjection mode(DemoCenter3DY_nm)=3,marker(DemoCenter3DY_nm)=19,msize(DemoCenter3DY_nm)=4,rgb(DemoCenter3DY_nm)=(65535,65535,65535)
+SetAxis/W=SNSDemo_Center3DTopProjection left -100,100
+SetAxis/W=SNSDemo_Center3DTopProjection bottom -250,250
+Label/W=SNSDemo_Center3DTopProjection left "y (\\U)"
+Label/W=SNSDemo_Center3DTopProjection bottom "x (\\U)"
+ModifyGraph/W=SNSDemo_Center3DTopProjection width=180,height=100,tick=2,fSize=root:globalLabelSize
+
+DoWindow/F SNS_3DMaskSide_YZ
+Label left "z (\\U)"
+Label bottom "y\\B⊥B\\M (\\U)"
+ModifyGraph tick=2,fSize=root:globalLabelSize
+DoWindow/C SNSDemo_Center3DTransverseProjection
+
+DoWindow/F SNS_3DMaskSide_XZ
+Label left "z (\\U)"
+Label bottom "x\\B∥B\\M (\\U)"
+ModifyGraph tick=2,fSize=root:globalLabelSize
+DoWindow/C SNSDemo_Center3DLongitudinalProjection
+
+SetDataFolder root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:Center3D:
+SNS_ComputeDOS_FromSettings("root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Center3D:", "LDOS_EB_raw", "E_eV", h_eff_3D_nm=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_height_nm)
+SNS_ApplyDOS_Broadening_TplusMod(LDOS_EB_raw, "LDOS_EB_convolved")
+SNS_NormalizeWaterFall(LDOS_EB_convolved, v_maskrange=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_normMask_eV)
+Duplicate/O LDOS_EB_convolved_n LDOS_EB_display
+SetScale/P x DimOffset(LDOS_EB_display,0)*1e3,DimDelta(LDOS_EB_display,0)*1e3,"meV",LDOS_EB_display
+SetScale/P y DimOffset(LDOS_EB_display,1)*1e3,DimDelta(LDOS_EB_display,1)*1e3,"mT",LDOS_EB_display
+
+DoWindow/K SNSDemo_Center3D
+SNS_DisplayWithScales(LDOS_EB_display, cmap="davos", showScales=2)
+DoWindow/C SNSDemo_Center3D
+ModifyGraph/W=SNSDemo_Center3D width=150,height=150,tick=2,fSize=root:globalLabelSize
+Label/W=SNSDemo_Center3D left "B (\\U)"
+Label/W=SNSDemo_Center3D bottom "E (\\U)"
+TextBox/W=SNSDemo_Center3D/C/N=title/F=0/A=LT/X=2/Y=2 "3D, center"
+
+
+//==============================================================================
+// 6. Near-edge position: 3D LDOS(E,B)
+//==============================================================================
+SNS_ExtractModes3DForFolder("root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Edge3D:", STSx=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_edgeX_nm, STSy=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_edgeY_nm, Bangle_deg=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_Bangle_deg, H_nm=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_height_nm, maxPath_nm=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_maxPath_nm, doDisplay=0)
+
+SetDataFolder root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:Edge3D:
+SNS_ComputeDOS_FromSettings("root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:Edge3D:", "LDOS_EB_raw", "E_eV", h_eff_3D_nm=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_height_nm)
+SNS_ApplyDOS_Broadening_TplusMod(LDOS_EB_raw, "LDOS_EB_convolved")
+SNS_NormalizeWaterFall(LDOS_EB_convolved, v_maskrange=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_normMask_eV)
+Duplicate/O LDOS_EB_convolved_n LDOS_EB_display
+SetScale/P x DimOffset(LDOS_EB_display,0)*1e3,DimDelta(LDOS_EB_display,0)*1e3,"meV",LDOS_EB_display
+SetScale/P y DimOffset(LDOS_EB_display,1)*1e3,DimDelta(LDOS_EB_display,1)*1e3,"mT",LDOS_EB_display
+
+DoWindow/K SNSDemo_Edge3D
+SNS_DisplayWithScales(LDOS_EB_display, cmap="davos", showScales=2)
+DoWindow/C SNSDemo_Edge3D
+ModifyGraph/W=SNSDemo_Edge3D width=150,height=150,tick=2,fSize=root:globalLabelSize
+Label/W=SNSDemo_Edge3D left "B (\\U)"
+Label/W=SNSDemo_Edge3D bottom "E (\\U)"
+TextBox/W=SNSDemo_Edge3D/C/N=title/F=0/A=LT/X=2/Y=2 "3D, near edge"
+
+
+//==============================================================================
+// 7. Zero-field 2D line DOS across the middle of the short axis
+//==============================================================================
+SNS_InitDefaultSettings()
+SetDataFolder root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:Line2D:
+
+SNS_LineDOS_BFixed_FromMask(root:SNS_ABS_Demo_ModelGeometryAndLDOS:Geometry:w_mask, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_Bangle_rad, 0, -50, 0, 50, 0, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_stepFac2D, NLinePts=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_linePoints)
+SNS_NormalizeWaterFall(LDOS_Conv_B0mT, v_maskrange=root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_normMask_eV)
+Duplicate/O LDOS_Conv_B0mT_n LDOS_Line_display
+SetScale/P x DimOffset(LDOS_Line_display,0)*1e3,DimDelta(LDOS_Line_display,0)*1e3,"meV",LDOS_Line_display
+
+DoWindow/K SNSDemo_Line2D
+SNS_DisplayWithScales(LDOS_Line_display, cmap="davos", showScales=2)
+DoWindow/C SNSDemo_Line2D
+ModifyGraph/W=SNSDemo_Line2D width=150,height=150,tick=2,fSize=root:globalLabelSize
+Label/W=SNSDemo_Line2D left "r (\\U)"
+Label/W=SNSDemo_Line2D bottom "E (\\U)"
+TextBox/W=SNSDemo_Line2D/C/N=title/F=0/A=LT/X=2/Y=2 "2D line DOS, B = 0"
+
+
+//==============================================================================
+// 8. Free-vortex 2D surface-state LDOS(x,y,E) cubes
+//==============================================================================
+SetDataFolder root:SNS_ABS_Demo_ModelGeometryAndLDOS:Geometry:
+Make/O/D/N=1 Vortex_ptx,Vortex_pty
+Vortex_ptx=0
+Vortex_pty=0
+SetScale d 0,0,"nm",Vortex_ptx,Vortex_pty
+
+SetDataFolder root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:VortexCube2D:
+Make/O/D/N=(81,2) VortexCubePos_nm
+VortexCubePos_nm[][0] = -160 + 40*mod(p,9)
+VortexCubePos_nm[][1] = -48 + 12*floor(p/9)
+SetScale d 0,0,"nm",VortexCubePos_nm
+
+SNS_InitDefaultSettings(useVortex_in=1, nFlux_in=1, useDeltaMap_in=0)
+SNS_LDOSmap_BFixed_FromMask(root:SNS_ABS_Demo_ModelGeometryAndLDOS:Geometry:w_mask, VortexCubePos_nm, 0, 0, root:SNS_ABS_Demo_ModelGeometryAndLDOS:v_stepFac2D, ScreeningModel=0)
+SNS_MakeLDOS_E_MapFromSpectra("XY_B0mT_0deg_PhaseFree", "LDOS_E_raw_B0mT_0deg_PhaseFree", "ValidPt_B0mT_0deg_PhaseFree", outName="LDOS_xyE_raw_PhaseFree", nx=9, ny=9)
+SNS_MakeLDOS_E_MapFromSpectra("XY_B0mT_0deg_PhaseFree", "LDOS_E_conv_B0mT_0deg_PhaseFree", "ValidPt_B0mT_0deg_PhaseFree", outName="LDOS_xyE_convolved_PhaseFree", nx=9, ny=9)
+
+Variable/G v_VortexCubeZeroEnergyIndex = round((0-DimOffset(LDOS_xyE_convolved_PhaseFree,2))/DimDelta(LDOS_xyE_convolved_PhaseFree,2))
+Duplicate/O/R=[][][v_VortexCubeZeroEnergyIndex] LDOS_xyE_raw_PhaseFree,LDOS_xy_raw_E0
+Duplicate/O/R=[][][v_VortexCubeZeroEnergyIndex] LDOS_xyE_convolved_PhaseFree,LDOS_xy_convolved_E0
+Redimension/N=(9,9) LDOS_xy_raw_E0,LDOS_xy_convolved_E0
+
+DoWindow/K SNSDemo_VortexCubeRawE0
+SNS_DisplayWithScales(LDOS_xy_raw_E0, cmap="davos", showScales=2)
+DoWindow/C SNSDemo_VortexCubeRawE0
+AppendToGraph/W=SNSDemo_VortexCubeRawE0 root:SNS_ABS_Demo_ModelGeometryAndLDOS:Geometry:Vortex_pty vs root:SNS_ABS_Demo_ModelGeometryAndLDOS:Geometry:Vortex_ptx
+ModifyGraph/W=SNSDemo_VortexCubeRawE0 mode(Vortex_pty)=3,marker(Vortex_pty)=19,msize(Vortex_pty)=5,rgb(Vortex_pty)=(65535,65535,65535),width=150,height=100,tick=2,fSize=root:globalLabelSize
+Label/W=SNSDemo_VortexCubeRawE0 left "y (\\U)"
+Label/W=SNSDemo_VortexCubeRawE0 bottom "x (\\U)"
+TextBox/W=SNSDemo_VortexCubeRawE0/C/N=title/F=0/A=LT/X=2/Y=2 "Raw LDOS, E = 0"
+
+DoWindow/K SNSDemo_VortexCubeConvE0
+SNS_DisplayWithScales(LDOS_xy_convolved_E0, cmap="davos", showScales=2)
+DoWindow/C SNSDemo_VortexCubeConvE0
+AppendToGraph/W=SNSDemo_VortexCubeConvE0 root:SNS_ABS_Demo_ModelGeometryAndLDOS:Geometry:Vortex_pty vs root:SNS_ABS_Demo_ModelGeometryAndLDOS:Geometry:Vortex_ptx
+ModifyGraph/W=SNSDemo_VortexCubeConvE0 mode(Vortex_pty)=3,marker(Vortex_pty)=19,msize(Vortex_pty)=5,rgb(Vortex_pty)=(65535,65535,65535),width=150,height=100,tick=2,fSize=root:globalLabelSize
+Label/W=SNSDemo_VortexCubeConvE0 left "y (\\U)"
+Label/W=SNSDemo_VortexCubeConvE0 bottom "x (\\U)"
+TextBox/W=SNSDemo_VortexCubeConvE0/C/N=title/F=0/A=LT/X=2/Y=2 "Convolved LDOS, E = 0"
+
+
+//==============================================================================
+// 9. Result locations
+//==============================================================================
+// Geometry and channel ensembles:
+//   root:SNS_ABS_Demo_ModelGeometryAndLDOS:Geometry:
+//   root:SNS_ABS_Demo_ModelGeometryAndLDOS:Channels:
+//
+// Raw, broadened, normalized, and display-ready LDOS waves:
+//   root:SNS_ABS_Demo_ModelGeometryAndLDOS:Results:
+//==============================================================================

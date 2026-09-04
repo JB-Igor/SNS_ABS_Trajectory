@@ -1,0 +1,18 @@
+# Igor Pro experiment files
+*.pxp
+*.pxt
+*.ibw
+
+# Igor autosave / temp
+*.pxp.tmp
+*.bak
+
+# Windows noise
+Thumbs.db
+Desktop.ini
+
+# macOS noise
+.DS_Store
+
+# GitHub Desktop
+.github/

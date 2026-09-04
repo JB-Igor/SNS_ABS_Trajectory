@@ -1,0 +1,39 @@
+# SNS default settings config
+# Last reviewed: 2026-09-04
+#
+# Two tab-separated columns:
+#   key    value
+#
+# Units are encoded in key names where relevant. These are the public package
+# defaults and the 2D model settings used by the model-geometry demo.
+
+
+m_eff	0.45
+E_F_eV	0.5
+Delta_eV	0.001
+h_eff_m	25e-9
+Broadening_eV	5e-6
+T_K	0.4
+V_mod_eV	50e-6
+NE	301
+Bmin_T	-0.3
+Bmax_T	0.3
+NB	201
+BTK_barrier	0.65
+bandModel	0
+hbarvD_eVA	3.0
+muDirac_eV	0.2
+lmfp_edge_prefactor	pi
+useVortex	0
+nFlux	0
+nIntSteps	64
+useDeltaMap	0
+GammaBase_eV	NaN
+useGammaDopp	0
+useGammaZeeman	0
+useGammaPair	1
+useGammaUser	0
+useGammaCoh	0
+GammaDoppAlpha	0.01
+GammaZeemanScale	0
+GammaPairScale_eV_T2	0
